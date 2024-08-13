@@ -4,10 +4,11 @@
 #include "GameData/PTGameDataSingleton.h"
 #include "PTActor/PTProjectile.h"
 
-void ULauncherFireComponent::Init(APTGun* InRifle)
+#define ENABLE_DRAW_DEBUG 0
+
+void ULauncherFireComponent::SetProjectile(FString ProjectileKey)
 {
-	Super::Init(InRifle);
-	
+	CurrentProjectile = *ProjectileKey;
 	LoadResource();
 }
 
@@ -21,11 +22,14 @@ void ULauncherFireComponent::LoadResource()
 	AssetManager.LoadSFXAsset<USoundWave>(ProjectileData.ExplosionSound, nullptr);
 }
 
-void ULauncherFireComponent::FireProcess(FVector SpawnPoint, FRotator ShotDirection, float Range, int32 Damage)
+void ULauncherFireComponent::FireProcess(FVector SpawnPoint, FVector ViewLocation, FRotator ViewDirection, float Range, int32 Damage)
 {
+	FVector End = ViewLocation + ViewDirection.Vector() * Range;
+	FVector ShotDirection = End - SpawnPoint;
+	FRotator ShotRot = FRotationMatrix::MakeFromX(ShotDirection).Rotator();
+	
 	IPTGameInterface* GameMode = Cast<IPTGameInterface>(GetWorld()->GetAuthGameMode());
-
-	APTProjectile* Projectile = GameMode->GetSpawnManager()->SpawnObject<APTProjectile>(CurrentProjectile, ShotDirection, SpawnPoint, true);
+	APTProjectile* Projectile = GameMode->GetSpawnManager()->SpawnObject<APTProjectile>(CurrentProjectile, ShotRot, SpawnPoint, true);
 	Projectile->SetOwner(Gun->GetOwner());
 	Projectile->OnExplosion.BindLambda([this, Damage](const TArray<FOverlapResult>& OverlapResults, FVector Location){
 		Gun->DamageToOverlapResults(OverlapResults, Location, Damage);
@@ -35,4 +39,10 @@ void ULauncherFireComponent::FireProcess(FVector SpawnPoint, FRotator ShotDirect
 			GetWorld()->GetFirstPlayerController()->ClientStartCameraShake(HitCameraShakeClass);
 		}
 	});
+
+#if ENABLE_DRAW_DEBUG
+	DrawDebugLine(GetWorld(), ViewLocation, End, FColor::Green, true, 5.f);;
+
+	DrawDebugLine(GetWorld(), SpawnPoint, SpawnPoint + ShotRot.Vector() * Range, FColor::Red, true, 5.f);;
+#endif
 }

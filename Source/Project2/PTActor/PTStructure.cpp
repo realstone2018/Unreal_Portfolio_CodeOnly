@@ -4,7 +4,6 @@
 #include "Engine/StaticMeshActor.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystemComponent.h"
-#include "PTComponent/PTFactionComponent.h"
 #include "PTInterface/PTGameInterface.h"
 
 APTStructure::APTStructure()
@@ -19,9 +18,6 @@ APTStructure::APTStructure()
 	FireParticleComponent = CreateDefaultSubobject<UParticleSystemComponent>(TEXT("FireParticleComponent"));
 	FireParticleComponent->SetupAttachment(RootComponent);
 
-	FactionComponent = CreateDefaultSubobject<UPTFactionComponent>(TEXT("Faction"));
-	FactionComponent->SetFaction(EFaction::Player);
-	
 	static ConstructorHelpers::FClassFinder<AStaticMeshActor> FrameWallClassRef(TEXT("/Game/Project2/Blueprint/Structure/StructureFrame/BP_FrameWall.BP_FrameWall_C"));
 	if (FrameWallClassRef.Class)
 	{
@@ -34,7 +30,7 @@ APTStructure::APTStructure()
 		FrameMainStationClass = FrameMainStationClassRef.Class;
 	}
 	
-	MaxHp = bIsMainStation ? 6000.f : 3000.f;
+	MaxHp = bIsMainStation ? 5000.f : 1000.f;
 }
 
 void APTStructure::BeginPlay()

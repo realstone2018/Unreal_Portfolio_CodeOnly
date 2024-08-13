@@ -6,7 +6,6 @@
 #include "PTComponent/PTInputComponent.h"
 #include "PTComponent/Character/PTPlayerStatComponent.h"
 #include "PTComponent/Character//PTCharacterMoveComponent.h"
-#include "PTComponent/PTFactionComponent.h"
 #include "Physics/PTCollision.h"
 #include "PTInterface/PTGameInterface.h"
 #include "UI/PTHUDWidget.h"
@@ -29,7 +28,6 @@ APTPlayerCharacter::APTPlayerCharacter()
 	EquipmentComponent = CreateDefaultSubobject<UPTEquipmentComponent>(TEXT("EquipmentComponent"));
 
 	GetMesh()->HideBoneByName(TEXT("weapon_r"), EPhysBodyOp::PBO_None);
-	FactionComponent->SetFaction(EFaction::Player);
 }
 
 void APTPlayerCharacter::PossessedBy(AController* NewController)
@@ -38,13 +36,9 @@ void APTPlayerCharacter::PossessedBy(AController* NewController)
 
 	PlayerInputComponent->Init(CameraBoom);
 	PlayerInputComponent->SetCharacterControl(ECharacterControlType::Shoulder);
-}
-
-void APTPlayerCharacter::BeginPlay()
-{
-	Super::BeginPlay();
 
 	EquipmentComponent->Init();
+
 }
 
 void APTPlayerCharacter::SetupPlayerInputComponent(UInputComponent* Component)
@@ -82,21 +76,23 @@ void APTPlayerCharacter::Dash()
 
 void APTPlayerCharacter::StartAttack()
 {
-	if (IsReloading)
+	if (bIsReloading)
 	{
 		return;
 	}
 	
-	if (EquipmentComponent->GetCurrentGun()->PullTrigger() == false)
+	if (EquipmentComponent->GetCurrentGun()->GetCurrentAmmo() <= 0)
 	{
 		Reloading();
+		return;
 	}
+
+	EquipmentComponent->GetCurrentGun()->PullTrigger();
 }
 
 void APTPlayerCharacter::StopAttack()
 {
 	EquipmentComponent->GetCurrentGun()->StopTrigger();
-
 }
 
 void APTPlayerCharacter::ReloadAction()
@@ -106,7 +102,7 @@ void APTPlayerCharacter::ReloadAction()
 
 void APTPlayerCharacter::EquipInput(EEquipType EquipType)
 {
-	if (IsReloading || EquipmentComponent->GetCurrentGun()->GetIsFiring())
+	if (bIsReloading || EquipmentComponent->GetCurrentGun()->GetIsFiring())
 	{
 		return;
 	}
@@ -118,13 +114,13 @@ void APTPlayerCharacter::Reloading()
 {
 	APTGun* CurrentGun = EquipmentComponent->GetCurrentGun();
 
-	if (!IsReloading && !CurrentGun->GetIsFiring())
+	if (!bIsReloading && !CurrentGun->GetIsFiring())
 	{
-		IsReloading = true;
+		bIsReloading = true;
 
 		CurrentGun->OnCompleteReload.AddLambda(
 		[&](){
-			IsReloading = false;			
+			bIsReloading = false;			
 		});
 		
 		float ReloadAccelerationRateStat = 0.f;
@@ -143,25 +139,30 @@ void APTPlayerCharacter::SetupHUDWidget(UPTHUDWidget* InHUDWidget)
 	
 	StatComponent->OnStatChanged.AddUObject(InHUDWidget, &UPTHUDWidget::UpdateStat);
 	StatComponent->OnHpChanged.AddUObject(InHUDWidget, &UPTHUDWidget::UpdateHpBar);
-
+	
 	InHUDWidget->UpdateStat(StatComponent->GetBaseStat(), StatComponent->GetModifierStat());
 	InHUDWidget->UpdateHpBar(StatComponent->GetCurrentHp());
-	InHUDWidget->UpdateEquipWeapon(true);
+
+	SetupEquipmentWidget(InHUDWidget, EquipmentComponent->GetCurrentGun(), EEquipType::Main);
 	
 	EquipmentComponent->OnChangeEquip.BindLambda([this, InHUDWidget](EEquipType NewEquipType, APTGun* NewEquipment){
-		InHUDWidget->UpdateGunAmmo(NewEquipment->GetCurrentAmmo(), NewEquipment->GetMaxAmmo());
-		InHUDWidget->UpdateEquipWeapon(NewEquipType == EEquipType::Main);
-		
-		NewEquipment->OnChangeAmmo.Clear();
-		NewEquipment->OnStartReload.Clear();
-		NewEquipment->OnCompleteReload.Clear();
-		
-		NewEquipment->OnChangeAmmo.AddUObject(InHUDWidget, &UPTHUDWidget::UpdateGunAmmo);
-		NewEquipment->OnStartReload.AddLambda([this, InHUDWidget](){
-			InHUDWidget->UpdateGunReloadImg(true);
-		});
-		NewEquipment->OnCompleteReload.AddLambda([this, InHUDWidget](){
-			InHUDWidget->UpdateGunReloadImg(false);
-		});
+		SetupEquipmentWidget(InHUDWidget, NewEquipment, NewEquipType);
 	});
  }
+
+void APTPlayerCharacter::SetupEquipmentWidget(UPTHUDWidget* InHUDWidget, APTGun* Gun, EEquipType EquipType)
+{
+	Gun->OnChangeAmmo.Clear();
+	Gun->OnStartReload.Clear();
+	Gun->OnCompleteReload.Clear();
+		
+	Gun->OnChangeAmmo.AddUObject(InHUDWidget, &UPTHUDWidget::UpdateGunAmmo);
+	Gun->OnStartReload.AddLambda([this, InHUDWidget](){
+		InHUDWidget->UpdateGunReloadImg(true);
+	});
+	Gun->OnCompleteReload.AddLambda([this, InHUDWidget](){
+		InHUDWidget->UpdateGunReloadImg(false);
+	});
+
+	InHUDWidget->UpdateEquipWeapon(EquipType == EEquipType::Main, Gun->GetCurrentAmmo(), Gun->GetMaxAmmo());
+}

@@ -5,10 +5,10 @@
 #include "Manager/PTAssetManager.h"
 #include "PTComponent/Equipment/RifleFireComponent.h"
 #include "PTComponent/Equipment/LauncherFireComponent.h"
-#include "PTComponent/PTFactionComponent.h"
 #include "Character/PTCharacterBase.h"
 #include "GameData/PTGameDataSingleton.h"
 #include "GameData/PTGunData.h"
+#include "PTInterface/PTFactionInterface.h"
 
 APTGun::APTGun()
 {
@@ -50,7 +50,6 @@ void APTGun::Init(const FString GunDataKey)
 		case EGunType::Rifle:
 		{
 			URifleFireComponent* RifleFireComponent = NewObject<URifleFireComponent>(this, URifleFireComponent::StaticClass(), TEXT("RifleFireComponent"));
-			RifleFireComponent->OnHitTracing.BindUObject(this, &APTGun::PlayImpactEffectAndSound);
 			GunFireComponent = RifleFireComponent;
 			break;
 		}
@@ -71,25 +70,23 @@ void APTGun::Init(const FString GunDataKey)
 	GunFireComponent->Init(this);
 }
 
-uint8 APTGun::PullTrigger()
+void APTGun::PullTrigger()
 {
 	if (CurrentAmmo <= 0)
 	{
-		return false;
+		return;
 	}
 	
 	if (!bIsFiring)
 	{
-		FireCount = 0;
 		bIsFiring = true;
+		FireCount = 0;
 		
 		Fire();
 		
 		GetWorld()->GetTimerManager().ClearTimer(FireRateTimerHandle);
 		GetWorld()->GetTimerManager().SetTimer(FireRateTimerHandle, this, &APTGun::Fire, GunData.FireRate, true);
 	}
-
-	return true;
 }
 
 void APTGun::StopTrigger()
@@ -115,12 +112,11 @@ void APTGun::Fire()
 	ApplyRecoil();
 	PlayMuzzleFlashEffectAndSound();
 	
-	// 폰이 보고있는 시야의 시작 위치와 회전방향을 가져온다. (카메라가 붙어있는 경우 카메라 베이스로, 없는 경우는 모르겠다.)
-	FVector OutLocation;
+	FVector ViewLocation;
 	FRotator ViewRotation;
-	GetOwnerController()->GetPlayerViewPoint(OutLocation, ViewRotation);
+	GetOwnerController()->GetPlayerViewPoint(ViewLocation, ViewRotation);
 	
-	GunFireComponent->FireProcess(ProjectileSpawnPoint->GetComponentLocation(), ViewRotation, GunData.Range, GunData.Damage);
+	GunFireComponent->FireProcess(ProjectileSpawnPoint->GetComponentLocation(), ViewLocation, ViewRotation, GunData.Range, GunData.Damage);
 	FireCount++;
 }
 
@@ -157,39 +153,44 @@ void APTGun::ApplyRecoil()
 	PlayerController->SetControlRotation(NewRotation);
 }
 
-void APTGun::DamageToHitResult(FHitResult HitResult, int32 Damage, FVector ShotDirection)
+void APTGun::DamageToHitResult(FHitResult HitResult, int32 Damage, FVector DamageDirection)
 {
-	AActor* HitActor = HitResult.GetActor();
-	if (HitActor != nullptr)
+	PlayImpactEffectAndSound(HitResult.Location, DamageDirection);
+	
+	IPTFactionInterface* OwnerFaction = Cast<IPTFactionInterface>(GetOwner());
+	IPTFactionInterface* TargetFaction = Cast<IPTFactionInterface>(HitResult.GetActor());
+	if (OwnerFaction == nullptr || TargetFaction == nullptr)
 	{
-		FPointDamageEvent DamageEvent(Damage, HitResult, ShotDirection, nullptr);
-		HitActor->TakeDamage(Damage, DamageEvent, GetOwnerController(), GetOwner());;
+		return;
+	}
+	
+	if (EFactionUtil::IsHostility(OwnerFaction->GetFaction(), TargetFaction->GetFaction()))
+	{
+		FPointDamageEvent DamageEvent(Damage, HitResult, DamageDirection, nullptr);
+		HitResult.GetActor()->TakeDamage(Damage, DamageEvent, GetOwnerController(), GetOwner());
 	}
 }
 
 void APTGun::DamageToOverlapResults(const TArray<FOverlapResult>& OverlapResults, FVector Location, int32 InDamage)
 {
+	IPTFactionInterface* OwnerFaction = Cast<IPTFactionInterface>(GetOwner());
+
 	for (FOverlapResult Target : OverlapResults)
 	{
-		APTCharacterBase* TargetCharacter = Cast<APTCharacterBase>(Target.GetActor());
-		APTCharacterBase* GunOwner = Cast<APTCharacterBase>(GetOwner());
-				
-		if (!TargetCharacter)
+		IPTFactionInterface* TargetFaction = Cast<IPTFactionInterface>(Target.GetActor());
+		if (OwnerFaction == nullptr || TargetFaction == nullptr)
 		{
 			continue;
 		}
 
-		UPTFactionComponent* TargetFaction = TargetCharacter->GetFactionComponent();
-		if (TargetFaction->IsNoneFaction() || GunOwner->GetFactionComponent()->CompareFaction(TargetFaction))
+		if (EFactionUtil::IsHostility(OwnerFaction->GetFaction(), TargetFaction->GetFaction()))
 		{
-			continue;
+			FRadialDamageEvent RadialDamageEvent;
+			RadialDamageEvent.Params.BaseDamage = InDamage;
+			RadialDamageEvent.Params.MinimumDamage = InDamage;
+			RadialDamageEvent.Origin = Location;
+			Target.GetActor()->TakeDamage(InDamage, RadialDamageEvent, GetOwnerController(), GetOwner());
 		}
-		
-		FRadialDamageEvent RadialDamageEvent;
-		RadialDamageEvent.Params.BaseDamage = InDamage;
-		RadialDamageEvent.Params.MinimumDamage = InDamage;
-		RadialDamageEvent.Origin = Location;
-		TargetCharacter->TakeDamage(InDamage, RadialDamageEvent, GetOwnerController(), GunOwner);
 	}
 }
 
@@ -236,15 +237,15 @@ void APTGun::PlayMuzzleFlashEffectAndSound()
 	}	
 }
 
-void APTGun::PlayImpactEffectAndSound(FHitResult Hit, FVector ShotDirection)
+void APTGun::PlayImpactEffectAndSound(FVector Location, FVector Direction)
 {
 	if (ImpactEffect)
 	{
-		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ImpactEffect, Hit.Location, ShotDirection.Rotation());
+		UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), ImpactEffect, Location, Direction.Rotation());
 	}
 
 	if (ImpactSound)
 	{
-		UGameplayStatics::SpawnSoundAtLocation(GetWorld(), ImpactSound, Hit.Location);
+		UGameplayStatics::SpawnSoundAtLocation(GetWorld(), ImpactSound, Location);
 	}
 }

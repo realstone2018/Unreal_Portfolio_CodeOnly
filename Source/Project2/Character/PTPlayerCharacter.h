@@ -14,9 +14,7 @@ public:
 	APTPlayerCharacter();
 
 	virtual void PossessedBy(AController* NewController) override;
-
-	virtual void BeginPlay() override;
-
+	
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 
@@ -57,9 +55,11 @@ public:
 	
 	void Reloading();
 
+	virtual EFaction GetFaction() override { return EFaction::Player; }
+	
 private:
 	UPROPERTY()
-	uint8 IsReloading : 1;
+	uint8 bIsReloading : 1;
 
 #pragma endregion
 
@@ -70,5 +70,5 @@ public:
 	
 private:
 	virtual void SetupHUDWidget(UPTHUDWidget* InHUDWidget) override; // IPTCharacterHUDInterface
-	
+	void SetupEquipmentWidget(UPTHUDWidget* InHUDWidget, APTGun* NewEquipment, EEquipType NewEquipType);
 };

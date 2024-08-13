@@ -43,10 +43,10 @@ private:
 
 #pragma region Fire
 public:
-	uint8 PullTrigger();
+	void PullTrigger();
 	void StopTrigger();
 
-	void DamageToHitResult(FHitResult HitResult, int32 Damage, FVector ShotDirection);
+	void DamageToHitResult(FHitResult HitResult, int32 Damage, FVector DamageDirection);
 	void DamageToOverlapResults(const TArray<FOverlapResult>& OverlapResults, FVector Location, int32 InDamage);
 	
 	FORCEINLINE uint8 GetIsFiring() { return bIsFiring; }
@@ -97,7 +97,7 @@ private:
 #pragma region Effect, Sound
 public:
 	void PlayMuzzleFlashEffectAndSound();
-	void PlayImpactEffectAndSound(FHitResult Hit, FVector ShotDirection);
+	void PlayImpactEffectAndSound(FVector Location, FVector Direction);
 
 private:
 	UPROPERTY(VisibleAnywhere)

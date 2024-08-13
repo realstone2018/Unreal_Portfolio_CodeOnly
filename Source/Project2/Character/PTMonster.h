@@ -43,6 +43,8 @@ public:
 	FOnDeadDelegate OnDead;
 	FAICharacterAttackFinished OnAttackFinished;
 
+	virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+	
 	virtual void Dead() override;
 	virtual void Dash();
 	void Attack();
@@ -51,6 +53,8 @@ public:
 	virtual void OnNotifyAttack() override;
 	void EndAttackMontage(class UAnimMontage* TargetMontage, bool IsProperlyEnded);
 
+	virtual EFaction GetFaction() override { return EFaction::Monster; }
+	
 protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Animation") 
 	TObjectPtr<class UAnimMontage> AttackMontage;
@@ -64,12 +68,18 @@ private:
 
 #pragma region AI
 private:
-	FORCEINLINE float GetAIDetectPlayerRange() override { return 600.f;  }
-	FORCEINLINE float GetAIDetectWallRange() override {return 1500; }
+	FORCEINLINE float GetAIDetectPlayerRange() override { return 2000.f;  }
+	AActor* GetLastAttacker() override { return LastAttacker;; }
 
+	UPROPERTY()
+	TObjectPtr<AActor> LastAttacker;
+	
+	FORCEINLINE float GetAIDetectWallRange() override {return 1500; }
 	virtual float GetAIAttackRange() override { return MonsterStat->GetAttackRange(); }
 	virtual float GetAITurnSpeed() override { return 10.f; }
 	virtual float GetAIAttackCooldown() override { return MonsterStat->GetAttackCooldown(); }
+
+	virtual float GetHpRatio() override;
 	
 	virtual void JumpByAI() override { Dash(); }
 	

@@ -14,7 +14,7 @@ T* UPTSpawnManager::SpawnObject(FName DataKey, FRotator SpawnRotator, FVector Sp
 {
 	FTransform SpawnTransform(SpawnRotator, SpawnLocation);
 
-	T* PooledObject = PoolManager->GetPooledObject<T>(SpawnTransform, DataKey);
+	T* PooledObject = PoolManager->GetPoolObject<T>(SpawnTransform, DataKey);
 	ensure(PooledObject);
 
 	if (ReturnImmediately)
@@ -35,7 +35,7 @@ void UPTSpawnManager::ReturnObject(AActor* PooledObject)
 	FTimerHandle DeadTimerHandle;
 	GetWorld()->GetTimerManager().SetTimer(DeadTimerHandle,
 		FTimerDelegate::CreateLambda([this, PooledObject](){
-			PoolManager->ReturnPooledObject<T>(PooledObject);
+			PoolManager->ReturnPoolObject<T>(PooledObject);
 		}
 	), 5.0f, false);
 }
@@ -43,35 +43,15 @@ void UPTSpawnManager::ReturnObject(AActor* PooledObject)
 template <typename T, typename>
 void UPTSpawnManager::ReturnImmediatelyObject(AActor* PooledObject)
 {
-	PoolManager->ReturnPooledObject<T>(PooledObject);
+	PoolManager->ReturnPoolObject<T>(PooledObject);
 }
 
 void UPTSpawnManager::SpawnMonsterWave(FVector BaseSpawnLocation, int32 Num)
 {
-	BaseSpawnLocation = PTVectorUtil::GetCirclePoint<double>(BaseSpawnLocation, SPAWN_RADIUS);
-	
-	UNavigationSystemV1* NavSystem = UNavigationSystemV1::GetNavigationSystem(World);
-	if (NavSystem == nullptr)
-	{ 
-		return;
-	}
-	
 	for (int i = 0; i < Num; i++)
 	{
-		FVector SpawnLocation = BaseSpawnLocation;
-		FNavLocation NavLocation;
-		
-		 if (NavSystem->GetRandomPointInNavigableRadius(BaseSpawnLocation, NAVIGATION_RANDOM_RADIUS, NavLocation))
-		 {
-		 	SpawnLocation = NavLocation;
-		 }
+		FVector SpawnLocation = PTVectorUtil::GetCirclePoint<double>(BaseSpawnLocation, SPAWN_RADIUS);
+		SpawnLocation += FVector(0.f, 0.f, 500.f);
 		SpawnObject<APTMonster>(FName("Scorch"), FRotator::ZeroRotator, SpawnLocation, false);
-
-		// FVector DebugLocation(6500.f, 470.f, 130.f);
-		// if (NavSystem->GetRandomPointInNavigableRadius(DebugLocation, 10.F, NavLocation))
-		// {
-		// 	DebugLocation = NavLocation;
-		// }
-		// SpawnObject<APTMonster>(FName("Scorch"), FRotator::ZeroRotator, DebugLocation, false);
 	}	
 }

@@ -3,7 +3,6 @@
 #include "Components/CapsuleComponent.h"
 #include "PTGameModeBase.h"
 #include "PTComponent/Character/PTCharacterMoveComponent.h"
-#include "PTComponent/PTFactionComponent.h"
 #include "Physics/PTCollision.h"
 #include "AI/Monster/PTMonsterAIController.h"
 #include "UI/PTWidgetComponent.h"
@@ -19,8 +18,6 @@ APTMonster::APTMonster()
 	AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
 
 	MonsterStat = CreateDefaultSubobject<UPTMonsterStatComponent>(TEXT("MonsterStat"));
-
-	FactionComponent->SetFaction(EFaction::Monster);
 }
 
 void APTMonster::Initialize(FName DataKey)
@@ -88,6 +85,13 @@ void APTMonster::Terminate()
 UPTCharacterStatComponent* APTMonster::GetStatComponent()
 {
 	return MonsterStat;
+}
+
+float APTMonster::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator,
+	AActor* DamageCauser)
+{
+	LastAttacker = DamageCauser;
+	return Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 }
 
 void APTMonster::Dead()
@@ -182,6 +186,13 @@ void APTMonster::EndAttackMontage(UAnimMontage* TargetMontage, bool IsProperlyEn
 	}
 
 	HitTargets.Empty();
+}
+
+float APTMonster::GetHpRatio()
+{
+	float currentHp = static_cast<float>(MonsterStat->GetCurrentHp());
+	float maxHp = static_cast<float>(MonsterStat->GetMaxHp());
+	return currentHp / maxHp;
 }
 
 void APTMonster::AttackByAI(float& AttackCooldown)
